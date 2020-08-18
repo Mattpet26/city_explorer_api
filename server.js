@@ -48,7 +48,7 @@ function sendWeatherData(request, response){
 });
 }
 
-app.get(urlToTrails, sendTrailData);
+app.get('/trails', sendTrailData);
 function sendTrailData(request, response){
   let latitude = request.query.latitude;
   let longitude = request.query.longitude;
@@ -56,7 +56,8 @@ function sendTrailData(request, response){
 
   superagent.get(urlToTrails)
   .then(trailsComingBack => {
-    const trailsPass = trailsComingBack.body.data;
+    console.log(trailsComingBack.body)
+    const trailsPass = trailsComingBack.body.trails;
     const trailsArr = trailsPass.map(index => new Trails(index));
     response.send(trailsArr)
   })
@@ -80,9 +81,9 @@ function Weather(weatherObj){
 }
 
 function Trails(jsonObject){
-  this.name = jsonObject[0].name;
-  this.length = jsonObject[0].length;
-  this.summary = jsonObject[0].summary;
+  this.name = jsonObject.name;
+  this.length = jsonObject.length;
+  this.summary = jsonObject.summary;
 }
 
 //================= start the server =======================================
