@@ -3,15 +3,20 @@ const express = require('express');
 const cors = require('cors');
 const superagent = require('superagent');
 require('dotenv').config();
+const pg = require('pg');
 
 //====================== Global Variables =================================
 const PORT = process.env.PORT || 3003; // short circuiting and chosing port if it exists, otherwise 3003
 const GEOCODE_API_KEY = process.env.GEOCODE_API_KEY;
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 const TRAIL_API_KEY = process.env.TRAIL_API_KEY;
+const DATABASE_URL = process.env.DATABASE_URL
+
 const app = express();
 app.use(cors()); //enables server to talk to local things
 
+const client = new pg.Client(DATABASE_URL);
+client.on('error', (error) => console.error(error))
 //========================= Routes =========================================
 app.get('/location', sendLocationData)
 function sendLocationData(request, response){
@@ -87,4 +92,7 @@ function Trails(jsonObject){
 }
 
 //================= start the server =======================================
-app.listen(PORT, () => console.log(`we are running on PORT : ${PORT}`));
+client.connect()
+  .then(() => {
+    app.listen(PORT, () => console.log(`We are running on ${PORT}`));
+  });
