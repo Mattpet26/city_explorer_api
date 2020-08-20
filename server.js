@@ -4,13 +4,15 @@ const cors = require('cors');
 const superagent = require('superagent');
 require('dotenv').config();
 const pg = require('pg');
+const { response } = require('express');
+const request = require('superagent');
 
 //====================== Global Variables =================================
 const PORT = process.env.PORT || 3003; // short circuiting and chosing port if it exists, otherwise 3003
 const GEOCODE_API_KEY = process.env.GEOCODE_API_KEY;
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 const TRAIL_API_KEY = process.env.TRAIL_API_KEY;
-const DATABASE_URL = process.env.DATABASE_URL
+const DATABASE_URL = process.env.DATABASE_URL;
 
 const app = express();
 app.use(cors()); //enables server to talk to local things
@@ -20,20 +22,35 @@ client.on('error', (error) => console.error(error))
 //========================= Routes =========================================
 app.get('/location', sendLocationData)
 function sendLocationData(request, response){
-  const thingToSearchFor = request.query.city;
-  const urlToSearch = `https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${thingToSearchFor}&format=json`;
-
-  superagent.get(urlToSearch)
-    .then(whateverComesBack => {
-      const superagentResultArray = whateverComesBack.body;
-      const constructedLocations = new Locations(superagentResultArray)
-      response.send(constructedLocations)
-    })
-    .catch(error => {
-      console.log(error);
-      response.status(500).send(error.message);
-  });
-}
+  const SQLStatement = 'SELECT * FROM locations;';
+    client.query(SQLStatement)
+      .then(resultFromSQL =>{
+        if(resultFromSQL.rowCount > 0){
+          response.send(resultFromSQL.rows)
+        }else{
+          const thingToSearchFor = request.query.city;
+          const urlToSearch = `https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${thingToSearchFor}&format=json`;
+        
+          superagent.get(urlToSearch)
+            .then(whateverComesBack => {
+              const superagentResultArray = whateverComesBack.body;
+              const constructedLocations = new Locations(superagentResultArray)
+              //do another client query that does an insert
+              const queryString = 'INSERT INTO locations(thingToSearchFor) VALUES ($1)';
+              const valueArray = [thingToSearchFor];
+              client.query(queryString, valueArray)
+                .then(()=>{
+                  response.status(201).send('successfully added to database?')
+                })
+                response.send(constructedLocations)
+            })
+            .catch(error => {
+              console.log(error);
+              response.status(500).send(error.message);
+          });
+        }
+      });
+  }
 
 app.get('/weather', sendWeatherData);
 function sendWeatherData(request, response){
@@ -50,7 +67,7 @@ function sendWeatherData(request, response){
   .catch(error => {
     console.log(error);
     response.status(500).send(error.message);
-});
+  });
 }
 
 app.get('/trails', sendTrailData);
@@ -61,7 +78,6 @@ function sendTrailData(request, response){
 
   superagent.get(urlToTrails)
   .then(trailsComingBack => {
-    console.log(trailsComingBack.body)
     const trailsPass = trailsComingBack.body.trails;
     const trailsArr = trailsPass.map(index => new Trails(index));
     response.send(trailsArr)
@@ -69,7 +85,7 @@ function sendTrailData(request, response){
   .catch(error => {
     console.log(error);
     response.status(500).send(error.message);
-});
+  });
 }
 
 //=========================== Function =====================================
