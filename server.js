@@ -26,7 +26,7 @@ function sendLocationData(request, response){
     client.query(SQLStatement)
       .then(resultFromSQL =>{
         if(resultFromSQL.rowCount > 0){
-          response.send(resultFromSQL.rows)
+          response.send(resultFromSQL.rows[0])
         }else{
           const thingToSearchFor = request.query.city;
           const urlToSearch = `https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${thingToSearchFor}&format=json`;
@@ -35,14 +35,12 @@ function sendLocationData(request, response){
             .then(whateverComesBack => {
               const superagentResultArray = whateverComesBack.body;
               const constructedLocations = new Locations(superagentResultArray)
-              //do another client query that does an insert
-              const queryString = 'INSERT INTO locations(thingToSearchFor) VALUES ($1)';
-              const valueArray = [thingToSearchFor];
+              const queryString = 'INSERT INTO locations(search_query, latitude, longitude, formatted_query) VALUES ($1, $2, $3, $4)';
+              const valueArray = [constructedLocations.search_query, constructedLocations.latitude, constructedLocations.longitude, constructedLocations.formatted_query];
               client.query(queryString, valueArray)
                 .then(()=>{
-                  response.status(201).send('successfully added to database?')
+                  response.status(201).send(constructedLocations)
                 })
-                response.send(constructedLocations)
             })
             .catch(error => {
               console.log(error);
@@ -56,6 +54,7 @@ app.get('/weather', sendWeatherData);
 function sendWeatherData(request, response){
   let latitude = request.query.latitude;
   let longitude = request.query.longitude;
+  console.log(request.query)
   const urlToSearchWeather = `https://api.weatherbit.io/v2.0/forecast/daily?&lat=${latitude}&lon=${longitude}&key=${WEATHER_API_KEY}`;
 
   superagent.get(urlToSearchWeather)
@@ -65,7 +64,7 @@ function sendWeatherData(request, response){
     response.send(weatherArr)
   })
   .catch(error => {
-    console.log(error);
+    console.log(error.message);
     response.status(500).send(error.message);
   });
 }
@@ -83,7 +82,7 @@ function sendTrailData(request, response){
     response.send(trailsArr)
   })
   .catch(error => {
-    console.log(error);
+    console.log(error.message);
     response.status(500).send(error.message);
   });
 }
