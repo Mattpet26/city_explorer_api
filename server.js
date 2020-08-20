@@ -3,37 +3,58 @@ const express = require('express');
 const cors = require('cors');
 const superagent = require('superagent');
 require('dotenv').config();
+const pg = require('pg');
+const { response } = require('express');
+const request = require('superagent');
 
 //====================== Global Variables =================================
 const PORT = process.env.PORT || 3003; // short circuiting and chosing port if it exists, otherwise 3003
 const GEOCODE_API_KEY = process.env.GEOCODE_API_KEY;
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 const TRAIL_API_KEY = process.env.TRAIL_API_KEY;
+const DATABASE_URL = process.env.DATABASE_URL;
+
 const app = express();
 app.use(cors()); //enables server to talk to local things
 
+const client = new pg.Client(DATABASE_URL);
+client.on('error', (error) => console.error(error))
 //========================= Routes =========================================
 app.get('/location', sendLocationData)
 function sendLocationData(request, response){
-  const thingToSearchFor = request.query.city;
-  const urlToSearch = `https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${thingToSearchFor}&format=json`;
-
-  superagent.get(urlToSearch)
-    .then(whateverComesBack => {
-      const superagentResultArray = whateverComesBack.body;
-      const constructedLocations = new Locations(superagentResultArray)
-      response.send(constructedLocations)
-    })
-    .catch(error => {
-      console.log(error);
-      response.status(500).send(error.message);
-  });
-}
+  const SQLStatement = 'SELECT * FROM locations;';
+    client.query(SQLStatement)
+      .then(resultFromSQL =>{
+        if(resultFromSQL.rowCount > 0){
+          response.send(resultFromSQL.rows[0])
+        }else{
+          const thingToSearchFor = request.query.city;
+          const urlToSearch = `https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${thingToSearchFor}&format=json`;
+        
+          superagent.get(urlToSearch)
+            .then(whateverComesBack => {
+              const superagentResultArray = whateverComesBack.body;
+              const constructedLocations = new Locations(superagentResultArray)
+              const queryString = 'INSERT INTO locations(search_query, latitude, longitude, formatted_query) VALUES ($1, $2, $3, $4)';
+              const valueArray = [constructedLocations.search_query, constructedLocations.latitude, constructedLocations.longitude, constructedLocations.formatted_query];
+              client.query(queryString, valueArray)
+                .then(()=>{
+                  response.status(201).send(constructedLocations)
+                })
+            })
+            .catch(error => {
+              console.log(error);
+              response.status(500).send(error.message);
+          });
+        }
+      });
+  }
 
 app.get('/weather', sendWeatherData);
 function sendWeatherData(request, response){
   let latitude = request.query.latitude;
   let longitude = request.query.longitude;
+  console.log(request.query)
   const urlToSearchWeather = `https://api.weatherbit.io/v2.0/forecast/daily?&lat=${latitude}&lon=${longitude}&key=${WEATHER_API_KEY}`;
 
   superagent.get(urlToSearchWeather)
@@ -43,9 +64,9 @@ function sendWeatherData(request, response){
     response.send(weatherArr)
   })
   .catch(error => {
-    console.log(error);
+    console.log(error.message);
     response.status(500).send(error.message);
-});
+  });
 }
 
 app.get('/trails', sendTrailData);
@@ -56,15 +77,14 @@ function sendTrailData(request, response){
 
   superagent.get(urlToTrails)
   .then(trailsComingBack => {
-    console.log(trailsComingBack.body)
     const trailsPass = trailsComingBack.body.trails;
     const trailsArr = trailsPass.map(index => new Trails(index));
     response.send(trailsArr)
   })
   .catch(error => {
-    console.log(error);
+    console.log(error.message);
     response.status(500).send(error.message);
-});
+  });
 }
 
 //=========================== Function =====================================
@@ -87,4 +107,7 @@ function Trails(jsonObject){
 }
 
 //================= start the server =======================================
-app.listen(PORT, () => console.log(`we are running on PORT : ${PORT}`));
+client.connect()
+  .then(() => {
+    app.listen(PORT, () => console.log(`We are running on ${PORT}`));
+  });
