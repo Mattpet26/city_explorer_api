@@ -19,42 +19,49 @@ app.use(cors()); //enables server to talk to local things
 
 const client = new pg.Client(DATABASE_URL);
 client.on('error', (error) => console.error(error))
-//========================= Routes =========================================
+
+//========================= Routes =========================================================================================
 app.get('/location', sendLocationData)
+app.get('/weather', sendWeatherData);
+app.get('/trails', sendTrailData);
+// app.get('/movies', sendMoviesData);
+// app.get('/yelp', sendYelpData);
+
+//========================= Route Handlers =====================================================================================
 function sendLocationData(request, response){
-  const SQLStatement = 'SELECT * FROM locations;';
-    client.query(SQLStatement)
-      .then(resultFromSQL =>{
-        if(resultFromSQL.rowCount > 0){
-          response.send(resultFromSQL.rows[0])
-        }else{
-          const thingToSearchFor = request.query.city;
-          const urlToSearch = `https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${thingToSearchFor}&format=json`;
-        
-          superagent.get(urlToSearch)
-            .then(whateverComesBack => {
-              const superagentResultArray = whateverComesBack.body;
-              const constructedLocations = new Locations(superagentResultArray)
-              const queryString = 'INSERT INTO locations(search_query, latitude, longitude, formatted_query) VALUES ($1, $2, $3, $4)';
-              const valueArray = [constructedLocations.search_query, constructedLocations.latitude, constructedLocations.longitude, constructedLocations.formatted_query];
-              client.query(queryString, valueArray)
-                .then(()=>{
-                  response.status(201).send(constructedLocations)
-                })
-            })
-            .catch(error => {
-              console.log(error);
-              response.status(500).send(error.message);
-          });
-        }
-      });
+  // const SQLStatement = 'SELECT * FROM locations'
+  const thingToSearchFor = request.query.city;
+  const urlToSearch = `https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${thingToSearchFor}&format=json`;
+
+  client.query( 'SELECT * FROM locations WHERE search_query=$1', [thingToSearchFor])
+    .then(resultFromSQL =>{
+      if(resultFromSQL.rowCount === 1){
+        response.send(resultFromSQL.rows[0])
+      }else{
+        superagent.get(urlToSearch)
+          .then(whateverComesBack => {
+            const superagentResultArray = whateverComesBack.body;
+            const constructedLocations = new Locations(superagentResultArray)
+
+            const queryString = 'INSERT INTO locations(search_query, latitude, longitude, formatted_query) VALUES ($1, $2, $3, $4)';
+            const valueArray = [constructedLocations.search_query, constructedLocations.latitude, constructedLocations.longitude, constructedLocations.formatted_query];
+            client.query(queryString, valueArray)
+              .then(()=>{
+                response.status(201).send(constructedLocations)
+              })
+          })
+          .catch(error => {
+            console.log(error);
+            response.status(500).send(error.message);
+        });
+      }
+    });
   }
 
-app.get('/weather', sendWeatherData);
+  
 function sendWeatherData(request, response){
   let latitude = request.query.latitude;
   let longitude = request.query.longitude;
-  console.log(request.query)
   const urlToSearchWeather = `https://api.weatherbit.io/v2.0/forecast/daily?&lat=${latitude}&lon=${longitude}&key=${WEATHER_API_KEY}`;
 
   superagent.get(urlToSearchWeather)
@@ -69,7 +76,7 @@ function sendWeatherData(request, response){
   });
 }
 
-app.get('/trails', sendTrailData);
+
 function sendTrailData(request, response){
   let latitude = request.query.latitude;
   let longitude = request.query.longitude;
@@ -87,7 +94,17 @@ function sendTrailData(request, response){
   });
 }
 
-//=========================== Function =====================================
+
+// function sendMoviesData(request, response){
+
+// }
+
+
+// function sendYelpData(request, response){
+
+// }
+
+//================================================================ Function =============================================================
 function Locations(jsonObject){
   this.latitude = jsonObject[0].lat;
   this.longitude = jsonObject[0].lon;
@@ -106,7 +123,21 @@ function Trails(jsonObject){
   this.summary = jsonObject.summary;
 }
 
-//================= start the server =======================================
+
+// function Movies(jsonObject){
+//   this.name = ;
+//   this.price = ;
+//   this.rating = ;
+// }
+
+
+// function Yelp(jsonObject){
+//   this.name = ;
+//   this.price = ;
+//   this.rating = ;
+// }
+
+//=============================================================== start the server ======================================================================
 client.connect()
   .then(() => {
     app.listen(PORT, () => console.log(`We are running on ${PORT}`));
