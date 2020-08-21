@@ -118,12 +118,13 @@ function sendYelpData(request, response){
   // const thingToSearchFor = request.query.search_query;
   let latitude = request.query.latitude;
   let longitude = request.query.longitude;
-  const urlToYelp = `https://api.yelp.com/v3/businesses/search?api_key=${YELP_API_KEY}&latitude=${latitude}&longitude=${longitude}`;
+  const urlToYelp = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${latitude}&longitude=${longitude}&start=${request.query.page *5}`;
 
   superagent.get(urlToYelp)
+  .set('Authorization', `Bearer ${YELP_API_KEY}`)
   .then(yelpComingBack => {
-    console.log(yelpComingBack)
-    const yelpPass = yelpComingBack.body;
+    console.log(yelpComingBack.body)
+    const yelpPass = yelpComingBack.body.businesses;
     const yelpArr = yelpPass.map(index => new Yelp(index));
     response.send(yelpArr)
   })
