@@ -13,6 +13,8 @@ const GEOCODE_API_KEY = process.env.GEOCODE_API_KEY;
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 const TRAIL_API_KEY = process.env.TRAIL_API_KEY;
 const DATABASE_URL = process.env.DATABASE_URL;
+const MOVIE_API_KEY = process.env.MOVIE_API_KEY;
+const YELP_API_KEY = process.env.YELP_API_KEY;
 
 const app = express();
 app.use(cors()); //enables server to talk to local things
@@ -24,12 +26,11 @@ client.on('error', (error) => console.error(error))
 app.get('/location', sendLocationData)
 app.get('/weather', sendWeatherData);
 app.get('/trails', sendTrailData);
-// app.get('/movies', sendMoviesData);
-// app.get('/yelp', sendYelpData);
+app.get('/movies', sendMoviesData);
+app.get('/yelp', sendYelpData);
 
 //========================= Route Handlers =====================================================================================
 function sendLocationData(request, response){
-  // const SQLStatement = 'SELECT * FROM locations'
   const thingToSearchFor = request.query.city;
   const urlToSearch = `https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${thingToSearchFor}&format=json`;
 
@@ -41,7 +42,7 @@ function sendLocationData(request, response){
         superagent.get(urlToSearch)
           .then(whateverComesBack => {
             const superagentResultArray = whateverComesBack.body;
-            const constructedLocations = new Locations(superagentResultArray)
+            const constructedLocations = new Locations(superagentResultArray, thingToSearchFor)
 
             const queryString = 'INSERT INTO locations(search_query, latitude, longitude, formatted_query) VALUES ($1, $2, $3, $4)';
             const valueArray = [constructedLocations.search_query, constructedLocations.latitude, constructedLocations.longitude, constructedLocations.formatted_query];
@@ -95,21 +96,49 @@ function sendTrailData(request, response){
 }
 
 
-// function sendMoviesData(request, response){
+function sendMoviesData(request, response){
+  const thingToSearchFor = request.query.search_query;
+  //store in search query
+  const urlToMovies = `https://api.themoviedb.org/3/search/movie?api_key=${MOVIE_API_KEY}&query=${thingToSearchFor}`;
 
-// }
+  superagent.get(urlToMovies)
+  .then(moviesComingBack => {
+    const moviePass = moviesComingBack.body.results;
+    const moviesArr = moviePass.map(index => new Movies(index));
+    response.send(moviesArr)
+  })
+  .catch(error => {
+    console.log(error.message);
+    response.status(500).send(error.message);
+  });
+}
 
 
-// function sendYelpData(request, response){
+function sendYelpData(request, response){
+  // const thingToSearchFor = request.query.search_query;
+  let latitude = request.query.latitude;
+  let longitude = request.query.longitude;
+  const urlToYelp = `https://api.yelp.com/v3/businesses/search?api_key=${YELP_API_KEY}&latitude=${latitude}&longitude=${longitude}`;
 
-// }
+  superagent.get(urlToYelp)
+  .then(yelpComingBack => {
+    console.log(yelpComingBack)
+    const yelpPass = yelpComingBack.body;
+    const yelpArr = yelpPass.map(index => new Yelp(index));
+    response.send(yelpArr)
+  })
+  .catch(error => {
+    console.log(error.message);
+    response.status(500).send(error.message);
+  });
+}
 
 //================================================================ Function =============================================================
-function Locations(jsonObject){
+function Locations(jsonObject, query){
   this.latitude = jsonObject[0].lat;
   this.longitude = jsonObject[0].lon;
   this.formatted_query = jsonObject[0].display_name;
-  this.search_query = jsonObject[0].icon;
+  this.search_query = query;
 }
 
 function Weather(weatherObj){
@@ -123,19 +152,24 @@ function Trails(jsonObject){
   this.summary = jsonObject.summary;
 }
 
+function Movies(jsonObject){
+  this.title = jsonObject.title;
+  this.overview = jsonObject.overview;
+  this.average_votes = jsonObject.vote_average;
+  this.total_votes = jsonObject.vote_count;
+  // this.image_url = jsonObject.image_url;
+  this.popularity = jsonObject.popularity;
+  this.released_on = jsonObject.release_date;
+}
 
-// function Movies(jsonObject){
-//   this.name = ;
-//   this.price = ;
-//   this.rating = ;
-// }
 
-
-// function Yelp(jsonObject){
-//   this.name = ;
-//   this.price = ;
-//   this.rating = ;
-// }
+function Yelp(jsonObject){
+  this.name = jsonObject.name;
+  this.image_url = jsonObject.image_url;
+  this.price = jsonObject.price;
+  this.rating = jsonObject.rating;
+  this.url = jsonObject.url;
+}
 
 //=============================================================== start the server ======================================================================
 client.connect()
